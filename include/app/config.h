@@ -29,19 +29,18 @@
 #define CONFIG_UDP_LOCAL_PORT            4210U
 
 /*============================================================================
- * UART RX Ring Buffer
+ * UART RX / Frame Format
  *============================================================================*/
 
-/** lwrb byte ring buffer: holds 5 × max-frame (38 B each = payload + '\0') */
-#define CONFIG_UART_RX_BUF_SIZE   256U
-
-/* 
-    frame 1: [type(0x01), float temperature, uint8 humidity %, uint16 air quality, CRC16]
-    total payload size: 1 + 4 + 1 + 2 + 2 = 10 bytes
-*/
+/*
+ * Frame 1: [type(0x01), float temperature, uint8 humidity %, uint16 air quality, CRC16]
+ * Total payload size: 1 + 4 + 1 + 2 + 2 = 10 bytes
+ */
 #define FRAME_1_PAYLOAD_LEN 10U
 
-#define RTOS_MESSAGE_BUFFER_LEN 10U
+/** MessageBuffer capacity in bytes. Must be > FRAME_1_PAYLOAD_LEN + 4 (FreeRTOS length prefix)
+ *  to hold at least one message. Sized for up to ~14 queued frames. */
+#define RTOS_MESSAGE_BUFFER_LEN (FRAME_1_PAYLOAD_LEN * 20U)
 
 /*============================================================================
  * FreeRTOS Task Configuration

@@ -24,8 +24,8 @@ preemptive multitasking, software timers, and synchronization primitives.
 | Blink/Alert Task  | Low      | Periodic (every 500 ms)  | Toggle inverse video on air quality alert                   |
 
 > **Network Task** merges WiFi/AT handling and UDP reception into a single task.
-> It blocks on a notification/semaphore and wakes only when the UART ISR
-> signals incoming data (e.g. `+IPD` from the ESP-01S).
+> It blocks on the FreeRTOS MessageBuffer (`x_message_buffer`) and wakes only
+> when the UART ISR delivers a complete `+IPD` frame.
 
 ### Configuration Notes
 
@@ -61,32 +61,30 @@ AT+CIPSTART="UDP","0.0.0.0",<remote_port>,<local_port>,2
 
 ### Packet Format
 
-Each sensor sends all its readings in a single ASCII datagram:
+Each sensor sends a fixed-length **binary** datagram (Frame 1, 10 bytes):
 
 ```
-<room_name>:<temperature>,<humidity>,<air_quality>\n
++--------+-----------+----------+-------------+--------+
+| type   | temp      | humidity | air_quality | CRC16  |
+| 1 byte | 4 bytes   | 1 byte   | 2 bytes     | 2 bytes|
+| 0x01   | float LE  | uint8 %  | uint16      |        |
++--------+-----------+----------+-------------+--------+
 ```
 
-| Field           | Description                    | Unit / Range | Example   |
-|-----------------|--------------------------------|--------------|-----------|
-| `room_name`     | Human-readable room identifier | string       | `kitchen` |
-| `temperature`   | Temperature                    | °C           | `23.5`    |
-| `humidity`      | Relative humidity              | %            | `48.2`    |
-| `air_quality`   | IAQ index (Indoor Air Quality) | 0 – 500      | `127`     |
-
-Example payloads:
-```
-kitchen:23.5,48.2,127
-bedroom:19.8,55.0,42
-garage:12.1,70.3,310
-```
+| Field         | Type      | Description                    | Unit / Range |
+|---------------|-----------|--------------------------------|--------------|
+| `type`        | `uint8`   | Frame type identifier          | `0x01`       |
+| `temperature` | `float`   | Temperature (little-endian)    | °C           |
+| `humidity`    | `uint8`   | Relative humidity              | 0 – 100 %    |
+| `air_quality` | `uint16`  | IAQ index (Indoor Air Quality) | 0 – 500      |
+| `CRC16`       | `uint16`  | CRC over bytes 0 – 7           |              |
 
 ### Interaction Diagram
 
 ```
-  Sensor 1 --- UDP datagram ("kitchen:23.5,48.2,127\n") ---\
-  Sensor 2 --- UDP datagram ("bedroom:19.8,55.0,42\n")  ----|---> STM32 Server
-  Sensor 3 --- UDP datagram ("garage:12.1,70.3,310\n")  ---/      (listening on fixed port)
+  Sensor 1 --- UDP binary frame (10 bytes) ---\
+  Sensor 2 --- UDP binary frame (10 bytes) ----|---> STM32 Server
+  Sensor 3 --- UDP binary frame (10 bytes) ---/      (listening on fixed port)
 ```
 
 No handshake, no subscription, no broker. The server simply listens and

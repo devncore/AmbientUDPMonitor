@@ -3,9 +3,9 @@
  * @brief UART RX interrupt-driven reception for ESP8266 +IPD frames
  *
  * Receives bytes via UART interrupt, parses +IPD,<len>:<payload> frames
- * from the ESP8266, and stores complete payloads into a shared ring buffer
- * (g_udp_frames_raw). A binary semaphore signals the network task when
- * a new frame is ready.
+ * from the ESP8266, and sends complete payloads into the FreeRTOS
+ * MessageBuffer x_message_buffer. The network task blocks on the
+ * MessageBuffer and is woken automatically when a new frame is ready.
  *
  * Usage:
  *   1. Call uart_rx_init() once at startup (before RTOS scheduler starts)
@@ -18,18 +18,9 @@
 
 #include <stdint.h>
 
-#include "cmsis_os.h"
 #include "stm32f4xx_hal.h"
+#include "FreeRTOS.h"          /* must precede message_buffer.h */
 #include "message_buffer.h"
-
-/*============================================================================
- * lwrb ring buffer for raw UDP payloads (ISR writes, network task reads)
- *============================================================================*/
-
-#include "lwrb/lwrb.h"
-
-/** SPSC ring buffer — ISR is the sole producer, network task the sole consumer */
-extern lwrb_t g_uart_rx_rb;
 
 extern MessageBufferHandle_t x_message_buffer;
 

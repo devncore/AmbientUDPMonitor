@@ -53,16 +53,6 @@ set(DRIVER_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/drivers/esp8266/esp8266.c
 )
 
-# lwrb (Lightweight Ring Buffer)
-set(LWRB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/lwrb)
-set(LWRB_SOURCES
-    ${LWRB_DIR}/src/lwrb.c
-    ${LWRB_DIR}/src/lwrb_ex.c
-)
-set(LWRB_INCLUDE_DIRS
-    ${LWRB_DIR}/include
-)
-
 # stm32-ssd1306 (SSD1306 / SH1107 OLED driver)
 set(SSD1306_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/stm32-ssd1306)
 set(SSD1306_SOURCES
@@ -212,7 +202,6 @@ set(LINKER_FLAGS
 add_executable(${PROJECT_NAME}
     ${APP_SOURCES}
     ${DRIVER_SOURCES}
-    ${LWRB_SOURCES}
     ${SSD1306_SOURCES}
     ${CUBEMX_SOURCES}
     ${STARTUP_SOURCES}

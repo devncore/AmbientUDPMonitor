@@ -3,28 +3,24 @@
  * @brief UART RX interrupt-driven reception with +IPD frame detection
  *
  * Byte-level ISR reception via HAL_UART_Receive_IT. A state machine parses
- * the ESP8266 "+IPD,<len>:<payload>" framing and writes complete, null-
- * terminated payloads into the lwrb ring buffer g_uart_rx_rb.
- * A binary semaphore wakes the network task when a new frame is ready.
+ * the ESP8266 "+IPD,<len>:<payload>" framing and sends complete payloads
+ * into the FreeRTOS MessageBuffer x_message_buffer, which wakes the network
+ * task via its built-in task notification.
  *
- * The ring buffer is lock-free (single producer ISR, single consumer task).
+ * The MessageBuffer is lock-free (single producer ISR, single consumer task).
  */
 
 #include "app/uart_rx.h"
 #include "app/config.h"
 
-#include "FreeRTOS.h"
 #include "message_buffer.h"
 #include "projdefs.h"
-#include "semphr.h"
 
 /*============================================================================
- * Ring buffer (extern'd in uart_rx.h)
+ * MessageBuffer (extern'd in uart_rx.h)
  *============================================================================*/
 
-static uint8_t s_rb_data[CONFIG_UART_RX_BUF_SIZE];
 MessageBufferHandle_t x_message_buffer;
-lwrb_t g_uart_rx_rb;
 
 /*============================================================================
  * +IPD state machine
@@ -145,8 +141,6 @@ void uart_rx_init(UART_HandleTypeDef* huart)
     s_rx.payload_idx = 0;
 
     x_message_buffer = xMessageBufferCreate(RTOS_MESSAGE_BUFFER_LEN);
-
-    lwrb_init(&g_uart_rx_rb, s_rb_data, sizeof(s_rb_data));
 }
 
 void uart_rx_start(void)
