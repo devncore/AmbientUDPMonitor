@@ -10,9 +10,9 @@
 #ifndef APP_NETWORK_H
 #define APP_NETWORK_H
 
-#include "FreeRTOS.h"          /* must precede message_buffer.h */
+#include "FreeRTOS.h"          /* must precede FreeRTOS headers */
 #include "message_buffer.h"
-#include "cmsis_os.h"
+#include "queue.h"
 #include "drivers/esp8266/esp8266.h"
 
 /*============================================================================
@@ -28,7 +28,7 @@
 typedef struct {
     esp8266_t             *esp;          /**< ESP8266 driver instance (owned by main) */
     MessageBufferHandle_t  msg_buf;      /**< MessageBuffer for ISR → task frame delivery */
-    osMessageQueueId_t     sensor_queue; /**< Queue for pushing decoded sensor frames */
+    QueueHandle_t          sensor_queue; /**< Queue for pushing decoded sensor frames */
 } network_task_config_t;
 
 /*============================================================================

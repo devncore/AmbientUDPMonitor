@@ -24,6 +24,7 @@
 #include "drivers/esp8266/esp8266.h"
 
 #include "cmsis_os.h"
+#include "queue.h"
 #include "main.h"
 
 /* External HAL handles (defined in CubeMX-generated code) */
@@ -48,7 +49,10 @@ static display_task_config_t g_display_cfg;
  * Shared synchronisation primitives
  *============================================================================*/
 
-static osMessageQueueId_t g_sensor_queue;
+#define SENSOR_QUEUE_LENGTH 8U
+static uint8_t       g_sensor_queue_storage[SENSOR_QUEUE_LENGTH * sizeof(sensor_data_t)];
+static StaticQueue_t g_sensor_queue_struct;
+static QueueHandle_t g_sensor_queue;
 static MessageBufferHandle_t g_msg_buffer;
 
 /*============================================================================
@@ -60,7 +64,8 @@ void app_main(void)
     /* HAL and peripherals are already initialised by CubeMX main() */
 
     /* affect shared queue/buffer */
-    g_sensor_queue = osMessageQueueNew(8, sizeof(sensor_data_t), NULL);
+    g_sensor_queue = xQueueCreateStatic(SENSOR_QUEUE_LENGTH, sizeof(sensor_data_t),
+                                        g_sensor_queue_storage, &g_sensor_queue_struct);
     g_msg_buffer = xMessageBufferCreate(RTOS_MESSAGE_BUFFER_LEN);
 
     /* initialization of uart */

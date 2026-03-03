@@ -18,7 +18,8 @@
 
 #include <stdint.h>
 #include "app/network_data.h"
-#include "cmsis_os.h"
+#include "FreeRTOS.h"
+#include "queue.h"
 
 /*============================================================================
  * Air quality classification
@@ -99,7 +100,7 @@ void display_remove_sensor(uint8_t sensor_col);
  * @brief Configuration passed to display_task() via its pvParameters argument.
  */
 typedef struct {
-    osMessageQueueId_t sensor_queue; /**< Queue from which decoded sensor frames are consumed */
+    QueueHandle_t sensor_queue; /**< Queue from which decoded sensor frames are consumed */
 } display_task_config_t;
 
 /**
