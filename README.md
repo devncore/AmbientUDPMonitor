@@ -58,8 +58,10 @@ Custom application code under `src/`:
 | ESP8266 driver | `src/drivers/esp8266/` | AT command sequencing, WiFi init, UDP socket open |
 | HAL interface | `src/hal/hal_interface.c` | UART abstraction used by the ESP8266 driver |
 | UART RX | `src/hal/uart_rx.c` | Interrupt-driven `+IPD` frame parser |
-| Network task | `src/app/network.c` | WiFi setup, frame reception and validation |
-| Display task | `src/app/display.c` | OLED layout and sensor data rendering |
+| Network task | `src/app/network.c` | WiFi setup, frame reception loop |
+| Frame parser | `src/app/frame_parser.c` | CRC16-CCITT computation and 10-byte binary frame decoding |
+| Display task | `src/app/display.c` | OLED layout, sensor data rendering, IAQ classification |
+| Sensor management | `src/app/displayed_sensor_management.c` | Active sensor slot allocation and timeout tracking |
 
 ---
 
@@ -85,7 +87,7 @@ Responsible for all WiFi communication. On startup it runs a blocking AT command
 3. Connect to the configured WiFi network (30 s timeout, retries on failure)
 4. Open a UDP listener on `CONFIG_UDP_LOCAL_PORT` (default **4210**)
 
-Once the socket is open it enables the UART interrupt receiver and enters an infinite loop. It blocks on a FreeRTOS **message buffer** waiting for frames posted by the UART ISR, validates each frame (type byte + CRC16-CCITT), then posts decoded `sensor_data_t` structs to the shared **sensor queue** consumed by the display task.
+Once the socket is open it enables the UART interrupt receiver and enters an infinite loop. It blocks on a FreeRTOS **message buffer** waiting for frames posted by the UART ISR, delegates decoding to `frame_parser.c` (type byte check + CRC16-CCITT), then posts decoded `sensor_data_t` structs to the shared **sensor queue** consumed by the display task.
 
 On any initialization failure it retries with a short delay (up to a full system reset if the ESP8266 cannot be reached).
 
@@ -99,8 +101,10 @@ Responsible for all OLED rendering. On startup it clears the framebuffer and dra
 
 It then blocks on the **sensor queue**. For each frame received:
 
-- Draws the room name label once (first frame per room)
+- Calls `displayed_sensor_update()` to map the sender's room name to a display column index (0–3), allocating a new slot on first contact or returning the existing one
+- Draws the room name label the first time a slot is assigned
 - Overwrites temperature, humidity, and the IAQ label in the correct column
+- Periodically calls `displayed_sensor_evaluate_timeout()` to free columns whose sensor has gone silent
 
 **Screen layout** (128×128 px, 3 px margin, Font_6x8):
 
@@ -156,13 +160,14 @@ Sensor node (UDP client)
         │  xMessageBufferReceive()  [blocks network_task]
         ▼
   network_task  [HIGH priority]
-  network.c — parse_sensor_frame()
-    ├─ Validate type byte (0x01)
-    ├─ Verify CRC16-CCITT over bytes [0..7]
-    └─ Decode:
-         bytes [1..4] → temperature (float)
-         byte  [5]    → humidity (uint8, %)
-         bytes [6..7] → IAQ index (uint16, 0–500)
+  network.c
+    └─ frame_parser.c — parse_sensor_frame()
+         ├─ Validate type byte (0x01)
+         ├─ Verify CRC16-CCITT over bytes [0..7]
+         └─ Decode:
+              bytes [1..4] → temperature (float)
+              byte  [5]    → humidity (uint8, %)
+              bytes [6..7] → IAQ index (uint16, 0–500)
         │
         │  osMessageQueuePut(g_sensor_queue)
         ▼
@@ -172,6 +177,9 @@ Sensor node (UDP client)
         ▼
   display_task  [LOW priority]
   display.c — display_update_sensor()
+    ├─ displayed_sensor_management.c — displayed_sensor_update()
+    │    └─ map room name → column index (0–3), allocate slot if new
+    ├─ display_iaq_classify()  →  AIQ label string
     ├─ Format strings (snprintf)
     ├─ ssd1306_SetCursor / ssd1306_WriteString
     └─ ssd1306_UpdateScreen()
@@ -194,6 +202,53 @@ Sensor node (UDP client)
 | `[5]` | Humidity (0–100) | `uint8_t` |
 | `[6..7]` | IAQ index (0–500) | `uint16_t` (little-endian) |
 | `[8..9]` | CRC16-CCITT over `[0..7]` | `uint16_t` (little-endian) |
+
+---
+
+## Testing
+
+Unit tests run on the host (no embedded target required) using the [Unity](https://github.com/ThrowTheSwitch/Unity) C unit testing framework, vendored as a git submodule at `tests/unity/`.
+
+Hardware and RTOS dependencies are replaced by thin stubs under `tests/stubs/`, so tests compile with a plain GCC toolchain and can run in any CI environment.
+
+### Test suites
+
+| Executable | Source | What it covers |
+|---|---|---|
+| `test_frame_parser` | [tests/test_frame_parser.c](tests/test_frame_parser.c) | `crc16_ccitt()` — known vector, empty input, single byte; `parse_sensor_frame()` — valid frame, wrong type byte, corrupted CRC, boundary IAQ values |
+| `test_display` | [tests/test_display.c](tests/test_display.c) | `display_iaq_classify()` — equivalence classes (PERFECT → VERY BAD) and boundary values at every threshold (50/51, 100/101, 150/151, 200/201, 300/301) |
+| `test_sensor_management` | [tests/test_sensor_management.c](tests/test_sensor_management.c) | `displayed_sensor_update()` — slot allocation, re-lookup, full table, overflow; `displayed_sensor_evaluate_timeout()` — no timeout before deadline, expiry, slot reuse, one-at-a-time freeing |
+
+### Running tests locally
+
+```bash
+./run_tests.sh
+```
+
+This script runs `cmake --preset tests`, builds, and invokes `ctest --preset tests` from the `tests/` directory. Requires `cmake` ≥ 3.22, `ninja`, and `gcc`.
+
+---
+
+## Quality Gates (CI)
+
+Two GitHub Actions workflows run on every push and pull request to `master`:
+
+### Unit Tests — `.github/workflows/unit-tests.yml`
+
+Installs a native GCC toolchain on `ubuntu-latest` and runs `run_tests.sh`. The workflow fails if any test executable reports a failure.
+
+### Static Analysis — `.github/workflows/static-analysis.yml`
+
+Installs `arm-none-eabi-gcc` and `clang-tidy`, generates `compile_commands.json` with CMake, then runs `run_clang_tidy.sh` against all project source files (third-party directories `lib/` and `mxcube/` are excluded).
+
+The `.clang-tidy` configuration is MISRA C:2012 / CERT C / Barr Embedded C inspired and enables:
+
+- `bugprone-*` — narrowing conversions, integer division, macro parentheses, unused return values, …
+- `clang-analyzer-core.*` / `clang-analyzer-deadcode.*` / `clang-analyzer-security.*` — static analysis passes
+- `readability-*` — braces around statements (MISRA 15.6), identifier naming (snake_case functions/variables, UPPER_CASE macros and enum constants, `_t` typedef suffix)
+- `cert-err34-c`, `cert-flp30-c`, `cert-str34-c` — CERT C rules
+
+Four checks are promoted to **errors** (build-breaking): `bugprone-assignment-in-if-condition`, `bugprone-suspicious-semicolon`, `readability-identifier-naming`, `readability-misleading-indentation`.
 
 ---
 
