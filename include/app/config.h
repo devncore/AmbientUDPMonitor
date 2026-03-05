@@ -85,6 +85,21 @@
 #define DISPLAY_SENSOR_TIMEOUT_MS 5000U
 
 /*============================================================================
+ * Watchdog Task Configuration
+ *============================================================================*/
+
+/** Period (ms) between successive watchdog kicks. Must be shorter than
+ *  CONFIG_WATCHDOG_TIMEOUT_MS to ensure the MCU is never reset unintentionally. */
+#define CONFIG_WATCHDOG_KICK_MS      5000U
+
+/** IWDG hardware timeout (ms). Computed from prescaler /256 and LSI ~32 kHz:
+ *  reload = CONFIG_WATCHDOG_TIMEOUT_MS / 8 must fit in 12 bits (max 4095 * 8 = 32760 ms). */
+#define CONFIG_WATCHDOG_TIMEOUT_MS   20000U
+
+#define CONFIG_WATCHDOG_TASK_STACK_SIZE  128U   /* words */
+#define CONFIG_WATCHDOG_TASK_PRIORITY    (osPriorityLow)
+
+/*============================================================================
  * Error management
  *============================================================================*/
 

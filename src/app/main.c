@@ -21,6 +21,7 @@
 #include "app/network_data.h"
 #include "app/display.h"
 #include "app/uart_rx.h"
+#include "app/watchdog.h"
 #include "drivers/esp8266/esp8266.h"
 #include "toolbox/assert.h"
 
@@ -107,6 +108,14 @@ void app_main(void)
         .priority   = (osPriority_t)CONFIG_DISPLAY_TASK_PRIORITY,
     };
     osThreadNew(display_task, &g_display_cfg, &display_attr);
+
+    /* Create Watchdog Task (low priority — kicks IWDG every 5 s) */
+    const osThreadAttr_t watchdog_attr = {
+        .name       = "watchdogTask",
+        .stack_size = CONFIG_WATCHDOG_TASK_STACK_SIZE * 4,
+        .priority   = (osPriority_t)CONFIG_WATCHDOG_TASK_PRIORITY,
+    };
+    osThreadNew(watchdog_task, NULL, &watchdog_attr);
 
     /*
      * The calling thread (defaultTask) is no longer needed.
