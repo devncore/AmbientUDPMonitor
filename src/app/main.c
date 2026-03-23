@@ -83,6 +83,9 @@ void app_main(void)
     /* --------------- Initialize shared data and components --------------- */
     /* --------------------------------------------------------------------- */
 
+    /* register error callbacks */
+    error_register_event_callback(display_error_event_callback);
+
     /* affect shared queue/buffer */
     g_raw_data_buffer = xMessageBufferCreate(RTOS_MESSAGE_BUFFER_LEN);
     g_sensor_data_for_display_queue = xQueueCreateStatic(SENSOR_QUEUE_LENGTH, sizeof(sensor_data_t),

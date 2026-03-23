@@ -49,10 +49,11 @@ set(TEST_C_FLAGS
 # Common source lists
 #------------------------------------------------------------------------------
 
-set(UNITY_SRC       ${UNITY_DIR}/unity.c)
-set(FREERTOS_STUBS  ${STUBS_DIR}/freertos_stubs.c)
-set(SSD1306_STUBS   ${STUBS_DIR}/ssd1306_stubs.c)
-set(GLOBALS_STUBS   ${STUBS_DIR}/globals_stubs.c)
+set(UNITY_SRC           ${UNITY_DIR}/unity.c)
+set(FREERTOS_STUBS      ${STUBS_DIR}/freertos_stubs.c)
+set(SSD1306_STUBS       ${STUBS_DIR}/ssd1306_stubs.c)
+set(GLOBALS_STUBS       ${STUBS_DIR}/globals_stubs.c)
+set(ERROR_MANAGER_STUBS ${STUBS_DIR}/error_manager_stubs.c)
 
 #------------------------------------------------------------------------------
 # test_display  —  tests display_iaq_classify()
@@ -81,6 +82,7 @@ add_test(NAME test_display COMMAND test_display)
 
 add_executable(test_frame_parser
     ${UNITY_SRC}
+    ${ERROR_MANAGER_STUBS}
     ${SRC_DIR}/app/frame_parser.c
     ${CMAKE_CURRENT_SOURCE_DIR}/test_frame_parser.c
 )

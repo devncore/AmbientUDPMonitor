@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include "app/network_data.h"
+#include "app/error_manager.h"
 #include "FreeRTOS.h"
 #include "queue.h"
 
@@ -36,6 +37,13 @@ typedef enum {
     AIR_QUALITY_BAD,
     AIR_QUALITY_VERY_BAD
 } air_quality_t;
+
+/**
+ * @brief Configuration passed to display_task() via its pvParameters argument.
+ */
+typedef struct {
+    QueueHandle_t sensor_queue; /**< Queue from which decoded sensor frames are consumed */
+} display_task_config_t;
 
 /**
  * @brief Convert a BME680 IAQ index (0–500) to an air_quality_t category.
@@ -96,12 +104,21 @@ void display_draw_sensor(uint8_t sensor_col, const sensor_data_t *data);
  */
 void display_remove_sensor(uint8_t sensor_col);
 
+
 /**
- * @brief Configuration passed to display_task() via its pvParameters argument.
+ * @brief Clear the screen and display the incoming error name.
+ *
+ * @param id  Error identifier to display. Must be < ERROR_COUNT.
  */
-typedef struct {
-    QueueHandle_t sensor_queue; /**< Queue from which decoded sensor frames are consumed */
-} display_task_config_t;
+void display_error_screen(error_id_t id);
+
+/**
+ * @brief Error callback called by error module on error event
+ *
+ * @param id     Error type
+ * @param event  Error event type
+ */
+void display_error_event_callback(error_id_t id, error_event_t event);
 
 /**
  * @brief FreeRTOS task entry point (osThreadFunc_t).

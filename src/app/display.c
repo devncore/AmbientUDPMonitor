@@ -40,6 +40,7 @@
 #include "app/display.h"
 #include "app/displayed_sensor_management.h"
 
+#include "app/error_manager.h"
 #include "ssd1306.h"
 #include "ssd1306_fonts.h"
 
@@ -53,6 +54,9 @@
  * Display task
  *============================================================================*/
 #define DISPLAY_TASK_TIMEOUT_TICKS 1500
+
+/* Set to true when an error screen is active; sensor updates are suppressed. */
+static bool s_error_active = false;
 
 /*============================================================================
  * Layout constants
@@ -104,6 +108,21 @@ static const char * const K_AQ_LABEL[] = {
     "MED",    /* AIR_QUALITY_MEDIUM    (IAQ 151–200) */
     "BAD",    /* AIR_QUALITY_BAD       (IAQ 201–300) */
     "VBAD",   /* AIR_QUALITY_VERY_BAD  (IAQ 301–500) */
+};
+
+/*============================================================================
+ * Error name label table
+ *============================================================================*/
+
+static const char * const K_ERROR_LABEL[ERROR_COUNT] = {
+    [ERROR_RESET_WATCHDOG_TIMEOUT] = "WDG Timeout",
+    [ERROR_RESET_OTHER]            = "Unexpected Reset",
+    [ERROR_ESP8266_INIT_FAILED]    = "ESP Init Failed",
+    [ERROR_WIFI_CONNECT_TIMEOUT]   = "WiFi Timeout",
+    [ERROR_UDP_START_FAILED]       = "UDP Start Failed",
+    [ERROR_MESSAGE_BUFFER_OVERFLOW]= "Buf Overflow",
+    [ERROR_SENSOR_FRAME_CRC_INVALID]="CRC Invalid",
+    [ERROR_SENSOR_QUEUE_PUT_FAILED] = "Queue Failed",
 };
 
 /*============================================================================
@@ -173,6 +192,27 @@ static void write_clipped(const char *str, uint8_t w)
     buf[len] = '\0';
 
     ssd1306_WriteString(buf, Font_6x8, White);
+}
+
+/*============================================================================
+ * Public: error screen
+ *============================================================================*/
+
+void display_error_screen(error_id_t id)
+{
+    ssd1306_Fill(Black);
+
+    const char *name = (id < ERROR_COUNT) ? K_ERROR_LABEL[id] : "Unknown";
+
+    ssd1306_SetCursor(0u, 52u);
+    ssd1306_WriteString("Incoming error", Font_6x8, White);
+
+    char buf[22];
+    snprintf(buf, sizeof(buf), "event: %s", name);
+    ssd1306_SetCursor(0u, 68u);
+    ssd1306_WriteString(buf, Font_6x8, White);
+
+    ssd1306_UpdateScreen();
 }
 
 /*============================================================================
@@ -268,6 +308,33 @@ void display_remove_sensor(uint8_t sensor_col)
     ssd1306_UpdateScreen();
 }
 
+void display_error_event_callback(error_id_t id, error_event_t event)
+{
+    // 1/ on some errors raise - trigger an error 
+    if(event == ERROR_ADDED)
+    {
+        bool trigger_error_screen = true;
+        switch(id)
+        {
+                case ERROR_MESSAGE_BUFFER_OVERFLOW:
+                case ERROR_SENSOR_FRAME_CRC_INVALID:
+                case ERROR_SENSOR_QUEUE_PUT_FAILED:
+                    trigger_error_screen = false;
+                    break;
+                default:
+                    break;
+        }
+
+        if(trigger_error_screen)
+        {
+            s_error_active = true;
+            display_error_screen(id);
+        }
+    }
+
+    // 2/ check that all displayed errors are disabled to desactive
+}
+
 /*============================================================================
  * FreeRTOS task
  *============================================================================*/
@@ -283,27 +350,30 @@ void display_task(void *argument)
         sensor_data_t data;
         const osStatus_t queue_status = xQueueReceive(cfg->sensor_queue, &data, DISPLAY_TASK_TIMEOUT_TICKS);
 
-         // update sensor timestamps and evaluate wether any timeout
-         uint8_t index_of_timeout = displayed_sensor_evaluate_timeout();
-         if(index_of_timeout != NO_TIMEOUT)
-         {
-            display_remove_sensor(index_of_timeout);
-            room_drawn[index_of_timeout] = false;
-         }
-
-         // process data if available
-         if(queue_status == osOK)
-         {
-            // if sensor is referenced as 'active', then we update the display.
-            // Otherwise, incoming data is discarded.
-            const uint8_t sensor_col = displayed_sensor_update(data.room);
-            if(sensor_col != NO_ACTIVE_INDEX_AVAILABLE)
+        if(!s_error_active)
+        {
+            // update sensor timestamps and evaluate wether any timeout
+            uint8_t index_of_timeout = displayed_sensor_evaluate_timeout();
+            if(index_of_timeout != NO_TIMEOUT)
             {
-                if (!room_drawn[sensor_col]) {
-                    display_draw_room(sensor_col, data.room);
-                    room_drawn[sensor_col] = true;
+                display_remove_sensor(index_of_timeout);
+                room_drawn[index_of_timeout] = false;
+            }
+
+            // process data if available
+            if(queue_status == osOK)
+            {
+                // if sensor is referenced as 'active', then we update the display.
+                // Otherwise, incoming data is discarded.
+                const uint8_t sensor_col = displayed_sensor_update(data.room);
+                if(sensor_col != NO_ACTIVE_INDEX_AVAILABLE)
+                {
+                    if (!room_drawn[sensor_col]) {
+                        display_draw_room(sensor_col, data.room);
+                        room_drawn[sensor_col] = true;
+                    }
+                    display_draw_sensor(sensor_col, &data);
                 }
-                display_draw_sensor(sensor_col, &data);
             }
         }
      }

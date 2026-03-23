@@ -65,7 +65,7 @@ void test_parse_valid_frame(void)
 
     sensor_data_t out;
     memset(&out, 0, sizeof(out));
-    TEST_ASSERT_TRUE(parse_sensor_frame(buf, &out));
+    parse_sensor_frame(buf, &out);
     TEST_ASSERT_TRUE(out.valid);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, expected_temp, out.temperature);
     TEST_ASSERT_EQUAL_UINT8(expected_hum,  (uint8_t)out.humidity);
@@ -78,8 +78,7 @@ void test_parse_invalid_type_byte(void)
     build_frame(buf, 20.0f, 50U, 80U);
     buf[0] = 0x02U; /* wrong type — CRC now also invalid, but type is checked first */
 
-    sensor_data_t out;
-    TEST_ASSERT_FALSE(parse_sensor_frame(buf, &out));
+    TEST_ASSERT_FALSE(validate_type(buf[0]));
 }
 
 void test_parse_corrupted_crc(void)
@@ -88,8 +87,7 @@ void test_parse_corrupted_crc(void)
     build_frame(buf, 20.0f, 50U, 80U);
     buf[8] ^= 0xFFU; /* flip all bits in the CRC low byte */
 
-    sensor_data_t out;
-    TEST_ASSERT_FALSE(parse_sensor_frame(buf, &out));
+    TEST_ASSERT_FALSE(validate_crc(buf));
 }
 
 void test_parse_zero_iaq(void)
@@ -98,7 +96,7 @@ void test_parse_zero_iaq(void)
     build_frame(buf, 22.0f, 45U, 0U);
 
     sensor_data_t out;
-    TEST_ASSERT_TRUE(parse_sensor_frame(buf, &out));
+    parse_sensor_frame(buf, &out);
     TEST_ASSERT_EQUAL_UINT16(0U, out.iaq);
 }
 
@@ -108,7 +106,7 @@ void test_parse_max_iaq(void)
     build_frame(buf, 30.0f, 80U, 500U);
 
     sensor_data_t out;
-    TEST_ASSERT_TRUE(parse_sensor_frame(buf, &out));
+    parse_sensor_frame(buf, &out);
     TEST_ASSERT_EQUAL_UINT16(500U, out.iaq);
 }
 

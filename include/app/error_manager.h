@@ -46,6 +46,21 @@ typedef enum {
     ERROR_COUNT                       /**< Sentinel — must remain last */
 } error_id_t;
 
+/**
+ * @brief Enumeration of error event type
+ */
+typedef enum
+{
+    ERROR_ADDED,
+    ERROR_REMOVED
+} error_event_t;
+
+/*============================================================================
+ * Types
+ *============================================================================*/
+
+typedef void (*error_event_callback_t)(error_id_t,error_event_t);
+
 /*============================================================================
  * API
  *============================================================================*/
@@ -102,5 +117,14 @@ bool error_is_active(error_id_t id);
  * @return  Current bitfield snapshot.
  */
 uint32_t error_get_all(void);
+
+/**
+ * @brief Register an error callback called whenever a new error is added or removed
+ *
+ * Bit N corresponds to error_id_t value N.
+ *
+ * @return  Current bitfield snapshot.
+ */
+bool error_register_event_callback(error_event_callback_t);
 
 #endif /* ERROR_MANAGER_H */

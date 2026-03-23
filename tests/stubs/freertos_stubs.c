@@ -7,6 +7,7 @@
  */
 
 #include "task.h"
+#include "queue.h"
 #include "freertos_test_helpers.h"
 
 static TickType_t s_tick_count = 0U;
@@ -19,4 +20,10 @@ void freertos_stub_set_tick(TickType_t ticks)
 TickType_t xTaskGetTickCount(void)
 {
     return s_tick_count;
+}
+
+BaseType_t xQueueReceive(QueueHandle_t xQueue, void *pvBuffer, TickType_t xTicksToWait)
+{
+    (void)xQueue; (void)pvBuffer; (void)xTicksToWait;
+    return 0;
 }
